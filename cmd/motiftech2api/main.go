@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,6 +26,14 @@ import (
 var version = "dev"
 
 func main() {
+	// Load .env before anything reads the environment. Real environment variables
+	// win, so systemd units and docker --env-file are never shadowed.
+	dotenvPath := os.Getenv("DOTENV_PATH")
+	if dotenvPath == "" {
+		dotenvPath = config.DefaultDotEnvPath()
+	}
+	applied, found := config.ApplyDotEnv(dotenvPath)
+
 	cfg := config.Load()
 
 	if len(os.Args) > 1 {
@@ -50,6 +59,18 @@ func main() {
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No WriteTimeout: responses are SSE and may legitimately run for minutes.
+	}
+
+	switch {
+	case found && len(applied) > 0:
+		log.Printf("env: %s (%d setting(s): %s)",
+			config.DescribeDotEnvPath(dotenvPath), len(applied), strings.Join(applied, ", "))
+	case found:
+		log.Printf("env: %s (no new settings; real environment already set them)",
+			config.DescribeDotEnvPath(dotenvPath))
+	default:
+		log.Printf("env: no %s found, using the environment only",
+			config.DescribeDotEnvPath(dotenvPath))
 	}
 
 	log.Printf("motif gateway listening on http://%s:%d", cfg.Host, cfg.Port)
@@ -95,11 +116,19 @@ Configured through the environment:
   CONVERSATION_TTL_HOURS %d
   STORE_PATH            %s
   DEBUG                 %v
+  DOTENV_PATH           %s  (read at startup; real env wins)
 
 Endpoints: GET /health, GET /v1/models, POST /v1/chat/completions
 `, version, cfg.Port, cfg.Host, cfg.UpstreamBase, cfg.UpstreamTimeoutMS,
 		describeKeys(len(cfg.GatewayAPIKeys)), cfg.ConversationTTLHours,
-		cfg.StorePath, cfg.Debug)
+		cfg.StorePath, cfg.Debug, dotenvPathForUsage())
+}
+
+func dotenvPathForUsage() string {
+	if p := os.Getenv("DOTENV_PATH"); p != "" {
+		return p
+	}
+	return ".env"
 }
 
 func describeKeys(n int) string {

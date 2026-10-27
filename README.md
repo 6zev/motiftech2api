@@ -13,6 +13,7 @@ Written in Go, standard library only: one static binary, no runtime, no dependen
 ## Quick start
 
 ```bash
+cp .env.example .env            # optional: edit port, keys, timeout
 go build -o motiftech2api ./cmd/motiftech2api
 ./motiftech2api                 # http://0.0.0.0:3000
 ```
@@ -38,8 +39,19 @@ curl -s localhost:3000/v1/chat/completions \
   -d '{"model":"motif-12-7b","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-Settings come from the environment (see `.env.example`); there is no `.env` loading,
-so export them or use your process manager.
+Settings come from the environment. The server also reads `./.env` at startup if it
+exists (see `.env.example`) — **real environment variables always win**, so a
+systemd unit or `docker --env-file` is never shadowed by a stray file. Point
+`DOTENV_PATH` elsewhere to load a different file. The startup log states which file
+was read and which keys came from it:
+
+```
+env: /srv/motif/.env (3 setting(s): PORT, UPSTREAM_BASE, DEBUG)
+motif gateway listening on http://0.0.0.0:4055
+```
+
+The parser is small and deliberately inert: it handles comments, `export `, quoted
+values and inline comments, but never interpolates `$VAR` and never runs commands.
 
 ## Configuration
 
