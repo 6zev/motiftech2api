@@ -1,0 +1,22 @@
+data: {"type":"shared.data.conversation_id","data":"01M5XR65XYNDJVEB7HA7VH6SEM"}
+
+data: {"type":"chat.text","data":"Hello"}
+
+data: {"type":"chat.text","data":"!"}
+
+data: {"type":"chat.text","data":" How"}
+
+data: {"type":"chat.text","data":" can"}
+
+data: {"type":"chat.text","data":" I"}
+
+data: {"type":"chat.text","data":" help"}
+
+data: {"type":"chat.text","data":"?"}
+
+data: {"type":"chat.step","data":{"role":"answer"}}
+
+data: {"type":"shared.data.message","data":{"message_id":"01M5XR68TRSBCZ3W32H61RTRN6","finish_class":"clean"}}
+
+data: {"type":"shared.sign","data":"[[HUB_STOP_SIGN]]"}
+

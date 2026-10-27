@@ -1,0 +1,20 @@
+data: {"type":"shared.data.conversation_id","data":"01M5XRNARRATEFAKE0000000001"}
+
+data: {"type":"chat.text","data":"Searching"}
+data: {"type":"chat.text","data":" the web"}
+
+data: {"type":"chat.step","data":{"role":"narration"}}
+
+data: {"type":"progress.web_search_query","data":{"query":"weather in hanoi"}}
+
+data: {"type":"shared.sign.tool","data":"[[HUB_STOP_SIGN]]"}
+
+data: {"type":"chat.text","data":"It"}
+data: {"type":"chat.text","data":" is"}
+data: {"type":"chat.text","data":" 28C"}
+
+data: {"type":"chat.step","data":{"role":"answer"}}
+
+data: {"type":"shared.data.message","data":{"message_id":"01M5XRNARRATEFAKE0000000002","finish_class":"clean"}}
+
+data: {"type":"shared.sign","data":"[[HUB_STOP_SIGN]]"}

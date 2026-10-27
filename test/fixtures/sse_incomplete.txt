@@ -1,0 +1,10 @@
+data: {"type":"shared.data.conversation_id","data":"01M5XRNARRATEFAKE0000000003"}
+
+data: {"type":"chat.text","data":"The answer was"}
+data: {"type":"chat.text","data":" cut off because it"}
+
+data: {"type":"chat.step","data":{"role":"answer"}}
+
+data: {"type":"shared.data.message","data":{"message_id":"01M5XRNARRATEFAKE0000000004","finish_class":"incomplete"}}
+
+data: {"type":"shared.sign","data":"[[HUB_STOP_SIGN]]"}

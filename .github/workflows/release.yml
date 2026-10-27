@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create and release (for example v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # A tag push starts here. The version is resolved once and shared, so the build
+  # and the release can never disagree about which version they are publishing.
+  prepare:
+    name: resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: version
+        name: Resolve version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.tag }}"
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+          case "$version" in
+            v*) ;;
+            *) echo "::error::Version must start with v, got '$version'"; exit 1 ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version"
+
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux,   goarch: amd64 }
+          - { goos: linux,   goarch: arm64 }
+          - { goos: darwin,  goarch: amd64 }
+          - { goos: darwin,  goarch: arm64 }
+          - { goos: windows, goarch: amd64, ext: .exe }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -eu
+          ext="${{ matrix.ext }}"
+          out="motiftech2api_${VERSION}_${GOOS}_${GOARCH}"
+          ldflags="-s -w -X main.version=${VERSION}"
+          go build -trimpath -ldflags "$ldflags" -o "dist/${out}${ext}" ./cmd/motiftech2api
+
+          cd dist
+          if [ "$GOOS" = "windows" ]; then
+            sha256sum "${out}${ext}" > "${out}${ext}.sha256"
+          else
+            chmod +x "${out}"
+            sha256sum "${out}" > "${out}.sha256"
+          fi
+          ls -l
+
+      - name: Verify the binary reports its version
+        # Only native-architecture binaries can be executed on this runner.
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -eu
+          ./dist/motiftech2api_${VERSION}_linux_amd64 --version | tee /tmp/reported
+          grep -qF "$VERSION" /tmp/reported
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motiftech2api_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: publish release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Collect checksums
+        working-directory: dist
+        run: |
+          set -eu
+          cat ./*.sha256 > checksums.txt
+          rm -f ./*.sha256
+          sort -k2 checksums.txt -o checksums.txt
+          echo "Assembled checksums.txt:"
+          cat checksums.txt
+
+      - name: Build release notes
+        # Commits since the previous tag; the whole history when this is the first.
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -eu
+          prev=$(git tag --sort=-v:refname | grep -vx "$VERSION" | head -n1 || true)
+          {
+            if [ -n "$prev" ]; then
+              echo "Changes since $prev:"
+              echo
+              git log --no-merges --pretty='- %s' "$prev..HEAD"
+            else
+              echo "First release."
+              echo
+              git log --no-merges --pretty='- %s'
+            fi
+            echo
+            echo "## Install"
+            echo
+            echo '```bash'
+            echo "# pick the file for your platform from the assets below, then:"
+            echo "chmod +x motiftech2api_${VERSION}_linux_amd64"
+            echo "./motiftech2api_${VERSION}_linux_amd64"
+            echo '```'
+            echo
+            echo "Environment variables and client setup are in the README."
+            echo
+            echo "Built from commit \`$(git rev-parse --short HEAD)\`."
+          } > /tmp/notes.md
+          cat /tmp/notes.md
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          name: ${{ needs.prepare.outputs.version }}
+          body_path: /tmp/notes.md
+          files: |
+            dist/motiftech2api_*
+            dist/checksums.txt
+          fail_on_unmatched_files: true
+          # Re-running a release replaces its assets instead of failing.
+          overwrite_files: true
