@@ -237,17 +237,21 @@ E2E=1 go test ./cmd/motiftech2api -run TestLive -v   # 3 live tests
 
 ### Releasing
 
-Tag and push; CI builds every platform, verifies the version stamp, and publishes a
-GitHub release with checksums:
+Tag and push; CI builds every platform, verifies the version stamp, publishes a
+GitHub release with checksums, and then smoke-tests the published asset:
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Or run the **Release** workflow manually and give it a tag. After publishing, the
-**Release smoke test** workflow downloads the published linux/amd64 asset, checks its
-checksum, and starts it to confirm `/health` and `/v1/models` respond.
+Or run the **Release** workflow manually and give it a tag.
+
+The smoke test is a job inside the same workflow, not a separate one: a release
+published with `GITHUB_TOKEN` does not emit a `release: published` event, so a
+separate workflow would never fire. It downloads the real asset, verifies its
+checksum, and starts it to confirm `/health` and `/v1/models` respond. If any of
+that fails, the release run fails with it.
 
 `--version` is stamped at build time (`-X main.version`); a plain local build reports
 `dev`.

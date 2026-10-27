@@ -170,3 +170,82 @@ jobs:
           fail_on_unmatched_files: true
           # Re-running a release replaces its assets instead of failing.
           overwrite_files: true
+
+  # Runs in the same workflow on purpose: a release published with GITHUB_TOKEN
+  # does not emit a `release: published` event, so a separate workflow would never
+  # fire. Here the version comes from `prepare`, not from an event payload.
+  smoke:
+    name: smoke test the published release
+    needs: [prepare, release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the published linux/amd64 asset and checksums
+        # Public repo, so no token is needed to fetch the assets. Fetching over
+        # https avoids depending on release-asset eventual consistency in the API.
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -eu
+          base="https://github.com/${{ github.repository }}/releases/download/${VERSION}"
+          mkdir -p dl
+          curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
+            -H "Cache-Control: no-cache" \
+            -o "dl/motiftech2api_${VERSION}_linux_amd64" \
+            "${base}/motiftech2api_${VERSION}_linux_amd64"
+          curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
+            -H "Cache-Control: no-cache" \
+            -o dl/checksums.txt "${base}/checksums.txt"
+          ls -l dl
+
+      - name: Verify checksum
+        working-directory: dl
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -eu
+          # The checksum lines end with the filename, so match the suffix rather
+          # than "name + space".
+          expected="motiftech2api_${VERSION}_linux_amd64"
+          grep -E " +${expected}\$" checksums.txt > selected || {
+            echo "::error::no entry for ${expected} in checksums.txt"
+            cat checksums.txt
+            exit 1
+          }
+          echo "checking:"
+          cat selected
+          sha256sum -c selected
+
+      - name: Run the published binary
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -eu
+          bin="dl/motiftech2api_${VERSION}_linux_amd64"
+          chmod +x "$bin"
+
+          reported=$("$bin" --version)
+          echo "reports: $reported"
+          [ "$reported" = "$VERSION" ] || {
+            echo "::error::binary reports '$reported' but the release is '$VERSION'"
+            exit 1
+          }
+
+          PORT=38111 STORE_PATH="$RUNNER_TEMP/conv.json" "$bin" &
+          pid=$!
+          trap 'kill -TERM $pid 2>/dev/null || true; wait $pid 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 50); do
+            if curl -sf localhost:38111/health > /dev/null; then break; fi
+            sleep 0.1
+          done
+
+          echo "health: $(curl -sf localhost:38111/health)"
+          curl -sf localhost:38111/health | grep -q '"ok"'
+
+          curl -sf localhost:38111/v1/models > models.json
+          grep -q 'motif-12-7b' models.json
+          grep -q 'motif-12-7b-reasoning' models.json
+          echo "models: $(grep -o 'motif-12-7b[-a-z]*' models.json | sort -u | tr '\n' ' ')"
+
+          echo "smoke test passed for $VERSION"
+
