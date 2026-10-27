@@ -48,7 +48,14 @@ jobs:
         working-directory: dl
         run: |
           set -eu
-          grep ' linux_amd64$' checksums.txt > expected
+          # Match the entry for this asset by its filename suffix.
+          grep -E ' +motiftech2api_[^ ]*_linux_amd64$' checksums.txt > expected || {
+            echo "::error::no linux/amd64 entry in checksums.txt"
+            cat checksums.txt
+            exit 1
+          }
+          echo "checking:"
+          cat expected
           sha256sum -c expected
 
       - name: Run it
