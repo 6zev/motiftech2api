@@ -109,13 +109,24 @@ type Client struct {
 	HTTP    *http.Client
 }
 
-// NewClient builds a client. A dedicated http.Client is used so the timeout is
-// per-gateway rather than global.
+// NewClient builds a client with the given transport. A dedicated http.Client is
+// used so the timeout is per-gateway rather than global; the caller supplies the
+// transport so outbound proxy settings (http or socks5) apply here too.
 func NewClient(base string, timeout time.Duration, hc *http.Client) *Client {
 	if hc == nil {
 		hc = &http.Client{}
 	}
 	return &Client{Base: base, Timeout: timeout, HTTP: hc}
+}
+
+// NewClientWithTransport is NewClient for callers that already resolved a
+// transport (see internal/netx for proxy handling).
+func NewClientWithTransport(base string, timeout time.Duration, rt http.RoundTripper) *Client {
+	return &Client{
+		Base:    base,
+		Timeout: timeout,
+		HTTP:    &http.Client{Transport: rt, Timeout: timeout},
+	}
 }
 
 // Stream issues the request and hands each event to fn until the turn ends.

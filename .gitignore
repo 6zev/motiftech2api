@@ -7,3 +7,4 @@
 # The built binary in the repo root (the source directory cmd/motiftech2api must
 # stay tracked, so this is anchored to the root rather than matching any path).
 /motiftech2api
+.codegraph/

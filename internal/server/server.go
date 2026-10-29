@@ -35,11 +35,17 @@ type Server struct {
 
 // New builds a server with the real upstream client.
 func New(cfg config.Config, st *store.Store) *Server {
+	return NewWithClient(cfg, st, nil)
+}
+
+// NewWithClient is New with an explicit HTTP client, so the caller can inject a
+// proxied transport (http or socks5). A nil client uses a plain one.
+func NewWithClient(cfg config.Config, st *store.Store, hc *http.Client) *Server {
 	return &Server{
 		Cfg:   cfg,
 		Store: st,
 		Upstream: upstream.NewClient(cfg.UpstreamBase,
-			time.Duration(cfg.UpstreamTimeoutMS)*time.Millisecond, nil),
+			time.Duration(cfg.UpstreamTimeoutMS)*time.Millisecond, hc),
 	}
 }
 

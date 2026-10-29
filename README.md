@@ -53,6 +53,63 @@ motif gateway listening on http://0.0.0.0:4055
 The parser is small and deliberately inert: it handles comments, `export `, quoted
 values and inline comments, but never interpolates `$VAR` and never runs commands.
 
+## Updating
+
+```bash
+./motiftech2api --check-update   # report whether a newer release exists
+./motiftech2api --update         # download, verify, and replace this binary
+```
+
+`--update` replaces the running binary in place. It is deliberately conservative and
+refuses to touch anything unless every step succeeds:
+
+1. download the asset for this platform to a temp file **next to** the target (same
+   filesystem, so the final rename is atomic)
+2. verify its SHA-256 against the release's `checksums.txt`
+3. run the downloaded file with `--version` and require it to report the release tag
+4. only then `rename` over the target, preserving the original permissions
+
+If any step fails the temp file is removed and the original binary is untouched, so a
+failed update cannot leave you without a working gateway. A build from source reports
+`dev` and is treated as older than every release, so `go build` users can update too.
+
+Restart the service afterwards. Configuration:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `UPDATE_REPO` | `6zev/motiftech2api` | Repository to pull releases from |
+| `UPDATE_API_BASE` | `https://api.github.com` | GitHub API root (mirror or Enterprise) |
+| `UPDATE_ALLOW_PRERELEASE` | *(unset)* | `1` accepts a pre-release |
+| `UPDATE_ALLOW_DRAFT` | *(unset)* | `1` accepts a draft |
+| `GITHUB_TOKEN` / `GH_TOKEN` | *(unset)* | Optional, raises the API rate limit |
+
+## Proxy
+
+Outbound requests (the Motif upstream **and** `--update`) honour a proxy. Client
+requests to the gateway are never affected.
+
+```bash
+MOTIF_PROXY=socks5://127.0.0.1:1080 ./motiftech2api
+MOTIF_PROXY=socks5://user:pass@proxy:1080 ./motiftech2api
+MOTIF_PROXY=http://proxy:3128 ./motiftech2api
+MOTIF_PROXY=none ./motiftech2api          # force direct
+```
+
+Resolution order, highest first:
+
+1. `MOTIF_PROXY` (`http://`, `https://`, `socks5://`, `socks5h://`, or `none`)
+2. the standard `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` variables
+3. `NO_PROXY` (a value of `*` disables proxying)
+4. direct
+
+A proxy that cannot be reached is a hard error — the gateway never silently falls back
+to a direct connection. The startup log states what was resolved, with credentials
+redacted:
+
+```
+proxy: socks5://127.0.0.1:1080
+```
+
 ## Configuration
 
 | Variable | Default | Meaning |
